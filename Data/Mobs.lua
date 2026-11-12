@@ -1,0 +1,130 @@
+-- Enemy templates. Health / damage / armor are multipliers on level-based
+-- baselines (see Run:SpawnMob in Engine/Combat.lua).
+--
+-- NPC ability types:
+--   nuke    single target spell          (dmg = multiplier, range)
+--   strike  heavy melee hit              (dmg = multiplier of a weapon swing)
+--   cleave  target + up to 2 nearby      (dmg = multiplier of a weapon swing)
+--   aoe     everyone within radius       (dmg)
+--   dot     damage over time             (dmg = total multiplier, duration)
+--   heal    heal self/ally under 60%     (healPct of max health)
+--   summon  spawn adds below hpBelow     (spawn = { mobKey, ... }, once)
+local ADDON, ns = ...
+
+local I = "Interface\\Icons\\"
+
+ns.Mobs = {
+    ------------------------------------------------------------------ RFC
+    RFC_TROGG = { name = "Ragefire Trogg", icon = I .. "INV_Misc_Head_Troll_01", hp = 1.0, dmg = 1.0 },
+    RFC_SHAMAN = { name = "Ragefire Shaman", icon = I .. "Spell_Nature_Lightning", hp = 0.8, dmg = 0.6, ranged = true,
+        abilities = { { name = "Lightning Bolt", icon = I .. "Spell_Nature_Lightning", type = "nuke", cd = 5, cast = 2,
+            dmg = 0.9, school = "nature", range = 30 },
+            { name = "Healing Wave", icon = I .. "Spell_Nature_MagicImmunity", type = "heal", cd = 12, cast = 2,
+                healPct = 0.25, range = 30 } } },
+    RFC_CULTIST = { name = "Searing Blade Cultist", icon = I .. "Spell_Shadow_RitualOfSacrifice", hp = 1.0, dmg = 1.05 },
+    RFC_WARLOCK = { name = "Searing Blade Warlock", icon = I .. "Spell_Shadow_ShadowBolt", hp = 0.8, dmg = 0.6, ranged = true,
+        abilities = { { name = "Shadow Bolt", icon = I .. "Spell_Shadow_ShadowBolt", type = "nuke", cd = 4, cast = 2.5,
+            dmg = 1.1, school = "shadow", range = 30 } } },
+    RFC_EARTHBORER = { name = "Earthborer", icon = I .. "INV_Misc_MonsterClaw_04", hp = 1.25, dmg = 0.9, armor = 1.3 },
+    RFC_ELEMENTAL = { name = "Molten Elemental", icon = I .. "Spell_Fire_Fire", hp = 1.1, dmg = 1.0,
+        abilities = { { name = "Fire Shield", icon = I .. "Spell_Fire_Fire", type = "aoe", cd = 8, radius = 6,
+            dmg = 0.4, school = "fire" } } },
+
+    RFC_OGGLEFLINT = { name = "Oggleflint", icon = I .. "INV_Misc_Head_Troll_01", boss = true, hp = 4.5, dmg = 1.3,
+        abilities = { { name = "Cleave", icon = I .. "Ability_Warrior_Cleave", type = "cleave", cd = 6, dmg = 1.2 } } },
+    RFC_TARAGAMAN = { name = "Taragaman the Hungerer", icon = I .. "Spell_Shadow_SummonFelHunter", boss = true, hp = 5.5, dmg = 1.35,
+        abilities = { { name = "Fire Nova", icon = I .. "Spell_Fire_SealOfFire", type = "aoe", cd = 10, radius = 10,
+            dmg = 0.9, school = "fire" },
+            { name = "Uppercut", icon = I .. "Ability_Warrior_DecisiveStrike", type = "strike", cd = 12, dmg = 1.6 } } },
+    RFC_JERGOSH = { name = "Jergosh the Invoker", icon = I .. "Spell_Shadow_CurseOfTounges", boss = true, hp = 4.5, dmg = 0.9,
+        ranged = true,
+        abilities = { { name = "Immolate", icon = I .. "Spell_Fire_Immolation", type = "dot", cd = 7, cast = 1.5,
+            dmg = 1.6, duration = 12, school = "fire", range = 30, random = true },
+            { name = "Shadow Bolt", icon = I .. "Spell_Shadow_ShadowBolt", type = "nuke", cd = 4, cast = 2,
+                dmg = 1.2, school = "shadow", range = 30 } } },
+    RFC_BAZZALAN = { name = "Bazzalan", icon = I .. "Ability_Rogue_Eviscerate", boss = true, hp = 5.0, dmg = 1.25,
+        abilities = { { name = "Deadly Poison", icon = I .. "Ability_Rogue_DualWeild", type = "dot", cd = 8, dmg = 1.2,
+            duration = 12, school = "nature" },
+            { name = "Sinister Strike", icon = I .. "Spell_Shadow_RitualOfSacrifice", type = "strike", cd = 6, dmg = 1.4 } } },
+
+    ------------------------------------------------------------------ Deadmines
+    DM_MINER = { name = "Defias Miner", icon = I .. "INV_Pick_02", hp = 1.0, dmg = 1.0 },
+    DM_OVERSEER = { name = "Defias Overseer", icon = I .. "INV_Misc_Bandana_03", hp = 1.15, dmg = 1.1 },
+    DM_EVOKER = { name = "Defias Evoker", icon = I .. "Spell_Fire_FlameBolt", hp = 0.8, dmg = 0.6, ranged = true,
+        abilities = { { name = "Fireball", icon = I .. "Spell_Fire_FlameBolt", type = "nuke", cd = 4, cast = 2.5,
+            dmg = 1.2, school = "fire", range = 30 } } },
+    DM_WOODCARVER = { name = "Goblin Woodcarver", icon = I .. "INV_Axe_04", hp = 0.95, dmg = 1.05 },
+    DM_ENGINEER = { name = "Goblin Engineer", icon = I .. "INV_Misc_Bomb_01", hp = 0.9, dmg = 0.8, ranged = true,
+        abilities = { { name = "Throw Bomb", icon = I .. "INV_Misc_Bomb_01", type = "aoe", cd = 9, cast = 1, radius = 6,
+            dmg = 0.7, school = "fire", range = 25, atTarget = true } } },
+    DM_PIRATE = { name = "Defias Pirate", icon = I .. "INV_Sword_04", hp = 1.0, dmg = 1.1 },
+    DM_SQUALLSHAPER = { name = "Defias Squallshaper", icon = I .. "Spell_Frost_FrostBolt02", hp = 0.85, dmg = 0.6, ranged = true,
+        abilities = { { name = "Frostbolt", icon = I .. "Spell_Frost_FrostBolt02", type = "nuke", cd = 4, cast = 2,
+            dmg = 1.0, school = "frost", range = 30 },
+            { name = "Healing Wave", icon = I .. "Spell_Nature_MagicImmunity", type = "heal", cd = 12, cast = 2,
+                healPct = 0.25, range = 30 } } },
+    DM_BLACKGUARD = { name = "Defias Blackguard", icon = I .. "Ability_Stealth", hp = 1.2, dmg = 1.15,
+        abilities = { { name = "Backstab", icon = I .. "Ability_BackStab", type = "strike", cd = 8, dmg = 1.5 } } },
+
+    DM_RHAHKZOR = { name = "Rhahk'Zor", icon = I .. "INV_Axe_10", boss = true, hp = 4.5, dmg = 1.35,
+        abilities = { { name = "Rhahk'Zor Slam", icon = I .. "Ability_Warrior_DecisiveStrike", type = "strike", cd = 8, dmg = 1.8 } } },
+    DM_SHREDDER = { name = "Sneed's Shredder", icon = I .. "INV_Gizmo_02", boss = true, hp = 5.0, dmg = 1.2, armor = 1.5,
+        abilities = { { name = "Distracting Pain", icon = I .. "Ability_Warrior_Cleave", type = "cleave", cd = 7, dmg = 1.2 } },
+        onDeath = { "DM_SNEED" } },
+    DM_SNEED = { name = "Sneed", icon = I .. "INV_Misc_Head_Gnome_01", boss = true, hp = 2.5, dmg = 1.2,
+        abilities = { { name = "Disarm", icon = I .. "Ability_Warrior_Disarm", type = "strike", cd = 10, dmg = 1.3 } } },
+    DM_GILNID = { name = "Gilnid", icon = I .. "Spell_Fire_Incinerate", boss = true, hp = 5.0, dmg = 1.2,
+        abilities = { { name = "Molten Metal", icon = I .. "Spell_Fire_Incinerate", type = "dot", cd = 9, dmg = 1.4,
+            duration = 9, school = "fire", random = true, range = 25 } } },
+    DM_SMITE = { name = "Mr. Smite", icon = I .. "INV_Hammer_05", boss = true, hp = 5.5, dmg = 1.4,
+        abilities = { { name = "Smite Stomp", icon = I .. "Ability_WarStomp", type = "aoe", cd = 12, radius = 9, dmg = 1.0 } } },
+    DM_GREENSKIN = { name = "Captain Greenskin", icon = I .. "INV_Misc_Bandana_01", boss = true, hp = 5.0, dmg = 1.35,
+        abilities = { { name = "Cleave", icon = I .. "Ability_Warrior_Cleave", type = "cleave", cd = 6, dmg = 1.25 } } },
+    DM_COOKIE = { name = "Cookie", icon = I .. "INV_Misc_Food_15", boss = true, hp = 4.5, dmg = 1.2,
+        abilities = { { name = "Cookie's Cooking", icon = I .. "INV_Misc_Food_15", type = "heal", cd = 15, cast = 2,
+            healPct = 0.15, self = true } } },
+    DM_VANCLEEF = { name = "Edwin VanCleef", icon = I .. "INV_Misc_Bandana_03", boss = true, hp = 6.5, dmg = 1.45,
+        abilities = { { name = "Call Blackguards", icon = I .. "Ability_Stealth", type = "summon", hpBelow = 0.5, once = true,
+            spawn = { "DM_BLACKGUARD", "DM_BLACKGUARD" } },
+            { name = "Thrash", icon = I .. "Ability_Warrior_Cleave", type = "cleave", cd = 7, dmg = 1.1 } } },
+
+    ------------------------------------------------------------------ Wailing Caverns
+    WC_FANG = { name = "Druid of the Fang", icon = I .. "Ability_Hunter_Pet_WindSerpent", hp = 0.9, dmg = 0.6, ranged = true,
+        abilities = { { name = "Lightning Bolt", icon = I .. "Spell_Nature_Lightning", type = "nuke", cd = 4, cast = 2,
+            dmg = 1.0, school = "nature", range = 30 },
+            { name = "Healing Touch", icon = I .. "Spell_Nature_HealingTouch", type = "heal", cd = 14, cast = 2.5,
+                healPct = 0.3, range = 30 } } },
+    WC_RAPTOR = { name = "Deviate Raptor", icon = I .. "Ability_Hunter_Pet_Raptor", hp = 0.95, dmg = 0.9, speed = 1.6 },
+    WC_VIPER = { name = "Deviate Viper", icon = I .. "Ability_Hunter_Pet_WindSerpent", hp = 0.9, dmg = 0.85,
+        abilities = { { name = "Poison", icon = I .. "Spell_Nature_CorrosiveBreath", type = "dot", cd = 10, dmg = 0.8,
+            duration = 9, school = "nature" } } },
+    WC_CROC = { name = "Deviate Crocolisk", icon = I .. "Ability_Hunter_Pet_Crocolisk", hp = 1.3, dmg = 1.0, armor = 1.4 },
+    WC_ECTOPLASM = { name = "Evolving Ectoplasm", icon = I .. "Spell_Nature_AcidBreath", hp = 1.1, dmg = 0.9 },
+    WC_LASHER = { name = "Deviate Lasher", icon = I .. "Spell_Nature_Thorns", hp = 1.0, dmg = 0.9,
+        abilities = { { name = "Wide Slash", icon = I .. "Ability_Warrior_Cleave", type = "aoe", cd = 9, radius = 7, dmg = 0.6 } } },
+
+    WC_ANACONDRA = { name = "Lady Anacondra", icon = I .. "Ability_Hunter_Pet_WindSerpent", boss = true, hp = 4.5, dmg = 0.9, ranged = true,
+        abilities = { { name = "Lightning Bolt", icon = I .. "Spell_Nature_Lightning", type = "nuke", cd = 3, cast = 2,
+            dmg = 1.3, school = "nature", range = 30 } } },
+    WC_COBRAHN = { name = "Lord Cobrahn", icon = I .. "Ability_Hunter_Pet_WindSerpent", boss = true, hp = 5.0, dmg = 1.2,
+        abilities = { { name = "Poison", icon = I .. "Spell_Nature_CorrosiveBreath", type = "dot", cd = 7, dmg = 1.3,
+            duration = 9, school = "nature", random = true, range = 25 } } },
+    WC_KRESH = { name = "Kresh", icon = I .. "Ability_Hunter_Pet_Turtle", boss = true, hp = 6.0, dmg = 1.25, armor = 2.0 },
+    WC_PYTHAS = { name = "Lord Pythas", icon = I .. "Ability_Hunter_Pet_WindSerpent", boss = true, hp = 5.0, dmg = 1.0, ranged = true,
+        abilities = { { name = "Lightning Bolt", icon = I .. "Spell_Nature_Lightning", type = "nuke", cd = 3.5, cast = 2,
+            dmg = 1.3, school = "nature", range = 30 },
+            { name = "Healing Touch", icon = I .. "Spell_Nature_HealingTouch", type = "heal", cd = 18, cast = 2.5,
+                healPct = 0.2, self = true } } },
+    WC_SKUM = { name = "Skum", icon = I .. "Ability_Hunter_Pet_Crocolisk", boss = true, hp = 5.5, dmg = 1.3,
+        abilities = { { name = "Chained Bolt", icon = I .. "Spell_Nature_ChainLightning", type = "aoe", cd = 10, radius = 40,
+            dmg = 0.6, school = "nature" } } },
+    WC_SERPENTIS = { name = "Lord Serpentis", icon = I .. "Ability_Hunter_Pet_WindSerpent", boss = true, hp = 5.5, dmg = 1.1, ranged = true,
+        abilities = { { name = "Lightning Bolt", icon = I .. "Spell_Nature_Lightning", type = "nuke", cd = 3, cast = 2,
+            dmg = 1.4, school = "nature", range = 30 } } },
+    WC_VERDAN = { name = "Verdan the Everliving", icon = I .. "Spell_Nature_Regenerate", boss = true, hp = 6.5, dmg = 1.4,
+        abilities = { { name = "Grasping Vines", icon = I .. "Spell_Nature_StrangleVines", type = "aoe", cd = 12, radius = 12, dmg = 1.0 } } },
+    WC_MUTANUS = { name = "Mutanus the Devourer", icon = I .. "Spell_Shadow_UnholyFrenzy", boss = true, hp = 7.0, dmg = 1.5,
+        abilities = { { name = "Thundercrack", icon = I .. "Spell_Nature_ThunderClap", type = "aoe", cd = 12, radius = 12,
+            dmg = 1.0, school = "nature" },
+            { name = "Terrify", icon = I .. "Spell_Shadow_Possession", type = "strike", cd = 15, dmg = 1.6 } } },
+}

@@ -1,0 +1,24 @@
+## Interface: 120001, 110207, 50503, 11508
+## Title: Jumbla: Dungeon Draft
+## Notes: Draft a five-hero party, gear them up and auto-battle through classic dungeons. Great for flights. /jumbla
+## Version: 0.1.0
+## SavedVariables: JumblaDB
+
+Core.lua
+
+Data\Classes.lua
+Data\Abilities.lua
+Data\Items.lua
+Data\Mobs.lua
+Data\Dungeons.lua
+
+Engine\Hero.lua
+Engine\Loot.lua
+Engine\Combat.lua
+
+UI\Widgets.lua
+UI\Draft.lua
+UI\Party.lua
+UI\Dungeons.lua
+UI\Battle.lua
+UI\Main.lua
