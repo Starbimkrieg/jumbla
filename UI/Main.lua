@@ -10,7 +10,7 @@ local VIEW_ORDER = { "draft", "party", "dungeons", "battle" }
 function UI:Create()
     if self.frame then return end
     local f = CreateFrame("Frame", "JumblaMainFrame", UIParent, "BasicFrameTemplateWithInset")
-    f:SetSize(780, 600)
+    f:SetSize(1000, 720)
     f:SetPoint("CENTER")
     f:SetFrameStrata("HIGH")
     f:SetMovable(true)
@@ -19,12 +19,20 @@ function UI:Create()
     f:RegisterForDrag("LeftButton")
     f:SetScript("OnDragStart", f.StartMoving)
     f:SetScript("OnDragStop", f.StopMovingOrSizing)
+    -- Ctrl + mouse wheel scales the whole window.
+    f:EnableMouseWheel(true)
+    f:SetScript("OnMouseWheel", function(_, delta)
+        if not IsControlKeyDown() then return end
+        self:SetScale((ns.db.settings.scale or f:GetScale()) + delta * 0.05)
+    end)
     f:Hide()
     table.insert(UISpecialFrames, "JumblaMainFrame")
     self.frame = f
 
     local title = W.Font(f, "GameFontHighlight", "Jumbla: Dungeon Draft")
     title:SetPoint("TOP", 0, -5)
+    local hint = W.Font(f, "GameFontDisableSmall", "Ctrl + mouse wheel to resize", "RIGHT")
+    hint:SetPoint("TOPRIGHT", -34, -32)
 
     self.tabs = {}
     local function Tab(label, view, x)
@@ -47,6 +55,22 @@ function UI:Create()
     end
 end
 
+function UI:SetScale(scale)
+    scale = ns.Clamp(scale, 0.5, 1.5)
+    ns.db.settings.scale = scale
+    self.frame:SetScale(scale)
+end
+
+-- First open: shrink to fit the screen if the window would be too tall.
+function UI:ApplyScale()
+    local scale = ns.db.settings.scale
+    if not scale then
+        local avail = UIParent:GetHeight() or 768
+        scale = math.min(1, (avail * 0.92) / 720)
+    end
+    self:SetScale(scale)
+end
+
 function UI:InBattle()
     return ns.Views.battle.run ~= nil
 end
@@ -67,6 +91,7 @@ end
 
 function UI:Show()
     self:Create()
+    self:ApplyScale()
     self.frame:Show()
     self:ShowView(self.current or (ns.db.party and "party" or "draft"))
 end

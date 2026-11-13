@@ -314,33 +314,57 @@ function Hero.UpgradeValue(h, item)
 end
 
 ---------------------------------------------------------------------------
--- Draft: Tank, Healer, then three DPS. Each slot offers two options; one
--- reroll is available for the whole draft.
+-- Draft: Tank, then Healer (two options each, one at a time), then all three
+-- DPS rows at once (two options per row, six different classes). One reroll
+-- for the whole draft: it rerolls the current Tank/Healer options or any
+-- single DPS row.
 ---------------------------------------------------------------------------
 
 local Draft = {}
 ns.Draft = Draft
 Draft.SLOTS = { "TANK", "HEALER", "DPS", "DPS", "DPS" }
+Draft.DPS_ROWS = 3
 Draft.REROLLS = 1
 
-local function TwoDistinct(pool)
+local function Distinct(pool, n, exclude)
     local copy = {}
-    for i, v in ipairs(pool) do copy[i] = v end
+    for _, v in ipairs(pool) do
+        if not (exclude and exclude[v]) then copy[#copy + 1] = v end
+    end
     ns.Shuffle(copy)
-    return { copy[1], copy[2] }
+    local out = {}
+    for i = 1, n do out[i] = copy[i] end
+    return out
 end
 
+local function RandomDPSSpec(cls)
+    local specs = ns.DPSSpecsFor(cls)
+    return specs[math.random(#specs)]
+end
+
+local function RollDPSRow(d, row)
+    local used = {}
+    for r, opts in ipairs(d.dps or {}) do
+        if r ~= row then
+            for _, specKey in ipairs(opts) do used[ns.Specs[specKey].class] = true end
+        end
+    end
+    local classes = Distinct(ns.DRAFT.DPS_CLASSES, 2, used)
+    d.dps[row] = { RandomDPSSpec(classes[1]), RandomDPSSpec(classes[2]) }
+    d.dpsPick[row] = nil
+end
+
+function Draft.InDPSStage(d) return d.slot > 2 end
+
 function Draft.Roll(d)
-    local role = Draft.SLOTS[d.slot]
-    if role == "DPS" then
-        local classes = TwoDistinct(ns.DRAFT.DPS_CLASSES)
-        d.options = {}
-        for i, cls in ipairs(classes) do
-            local specs = ns.DPSSpecsFor(cls)
-            d.options[i] = specs[math.random(#specs)]
+    if Draft.InDPSStage(d) then
+        d.options = nil
+        if not d.dps then
+            d.dps, d.dpsPick = {}, {}
+            for row = 1, Draft.DPS_ROWS do RollDPSRow(d, row) end
         end
     else
-        d.options = TwoDistinct(ns.DRAFT[role])
+        d.options = Distinct(ns.DRAFT[Draft.SLOTS[d.slot]], 2)
     end
 end
 
@@ -350,25 +374,70 @@ function Draft.New()
     return d
 end
 
-function Draft.Pick(d, index)
-    d.picks[#d.picks + 1] = d.options[index]
-    d.slot = d.slot + 1
-    if d.slot <= #Draft.SLOTS then Draft.Roll(d) else d.options = nil end
+-- Upgrades a draft saved by an older version (sequential DPS picks).
+function Draft.Migrate(d)
+    if d.slot > 2 and not d.dps then
+        while #d.picks > 2 do table.remove(d.picks) end
+        d.slot = 3
+        Draft.Roll(d)
+    end
 end
 
-function Draft.Reroll(d)
-    if d.rerolls <= 0 or not d.options then return false end
+-- Tank/Healer: pick option i. DPS stage: pick option i for `row`
+-- (defaults to the first row without a pick). Picks in a row can be changed.
+function Draft.Pick(d, index, row)
+    if not Draft.InDPSStage(d) then
+        d.picks[#d.picks + 1] = d.options[index]
+        d.slot = d.slot + 1
+        Draft.Roll(d)
+        return
+    end
+    if not row then
+        for r = 1, Draft.DPS_ROWS do
+            if not d.dpsPick[r] then row = r break end
+        end
+    end
+    if row then d.dpsPick[row] = index end
+end
+
+function Draft.Reroll(d, row)
+    if d.rerolls <= 0 then return false end
+    if Draft.InDPSStage(d) then
+        row = row or 1
+        if not d.dps[row] then return false end
+        RollDPSRow(d, row)
+    else
+        Draft.Roll(d)
+    end
     d.rerolls = d.rerolls - 1
-    Draft.Roll(d)
     return true
 end
 
-function Draft.IsDone(d) return d.slot > #Draft.SLOTS end
+function Draft.IsDone(d)
+    if not Draft.InDPSStage(d) or not d.dps then return false end
+    for r = 1, Draft.DPS_ROWS do
+        if not d.dpsPick[r] then return false end
+    end
+    return true
+end
+
+-- Spec keys of everything chosen so far, in slot order (nil gaps for open DPS rows).
+function Draft.Chosen(d)
+    local out = { d.picks[1], d.picks[2] }
+    if d.dps then
+        for r = 1, Draft.DPS_ROWS do
+            local i = d.dpsPick[r]
+            out[2 + r] = i and d.dps[r][i] or nil
+        end
+    end
+    return out
+end
 
 function Draft.Finish(d)
     local heroes, used = {}, {}
-    for _, specKey in ipairs(d.picks) do
-        local h = Hero.Create(specKey, used)
+    local chosen = Draft.Chosen(d)
+    for i = 1, #Draft.SLOTS do
+        local h = Hero.Create(chosen[i], used)
         used[h.name] = true
         heroes[#heroes + 1] = h
     end

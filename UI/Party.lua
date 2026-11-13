@@ -26,6 +26,7 @@ local function CreateHeroRow(parent, i)
     row.sel = row:CreateTexture(nil, "BORDER")
     row.sel:SetAllPoints()
     row.sel:SetColorTexture(1, 0.82, 0, 0.15)
+    W.Highlight(row, 0.12)
     row.portrait = W.CircleIcon(row, 40)
     row.portrait:SetPoint("LEFT", 8, 0)
     row.portrait:EnableMouse(false)
@@ -46,6 +47,7 @@ local function CreateSlotRow(parent, slot)
     local b = CreateFrame("Button", nil, parent)
     b:SetSize(270, 30)
     b:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    W.Highlight(b, 0.12)
     b.icon = b:CreateTexture(nil, "ARTWORK")
     b.icon:SetSize(28, 28)
     b.icon:SetPoint("LEFT")
@@ -80,6 +82,10 @@ local function CreateBagButton(parent, i)
     b.border:SetPoint("BOTTOMRIGHT", 2, -2)
     b.icon = b:CreateTexture(nil, "ARTWORK")
     b.icon:SetAllPoints()
+    local hl = b:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints()
+    hl:SetTexture("Interface\\Buttons\\ButtonHilight-Square")
+    hl:SetBlendMode("ADD")
     b.up = W.Font(b, "NumberFontNormal", "+")
     b.up:SetPoint("TOPRIGHT", -1, -1)
     b.up:SetTextColor(0.2, 1, 0.2)
@@ -91,7 +97,8 @@ end
 
 function View:Create(parent)
     local f = CreateFrame("Frame", nil, parent)
-    f:SetAllPoints()
+    f:SetSize(760, 600)
+    f:SetPoint("TOP", 0, -10)
     self.frame = f
     self.page = 1
 
@@ -124,6 +131,7 @@ function View:Create(parent)
         a:SetPoint("TOPRIGHT", -6 - (i - 1) * 23, -4)
         a.tex = a:CreateTexture(nil, "ARTWORK")
         a.tex:SetAllPoints()
+        W.Highlight(a, 0.25)
         a:SetScript("OnEnter", function(s) W.AbilityTooltip(s, s.abilityId) end)
         a:SetScript("OnLeave", W.HideTooltip)
         self.abilityButtons[i] = a
@@ -161,7 +169,15 @@ function View:Create(parent)
         self:Refresh()
     end)
     auto:SetPoint("TOPRIGHT", -8, -4)
-    local junk = W.Button(bag, "Sell Unusable", 120, 22, function() self:SellUnusable() end)
+    local junk = W.Button(bag, "Sell All", 100, 22, function() self:ConfirmSellAll() end)
+    junk:SetScript("OnEnter", function(b)
+        GameTooltip:SetOwner(b, "ANCHOR_TOP")
+        GameTooltip:SetText("Sell All", 1, 1, 1)
+        GameTooltip:AddLine("Sells every item in the bag that isn't an upgrade for someone in your party. "
+            .. "Upgrades (marked +) are kept for Auto-Equip.", 1, 0.82, 0, true)
+        GameTooltip:Show()
+    end)
+    junk:SetScript("OnLeave", W.HideTooltip)
     junk:SetPoint("RIGHT", auto, "LEFT", -6, 0)
 
     self.bagButtons = {}
@@ -259,31 +275,53 @@ function View:Sell(item)
     end
 end
 
--- Sells items nobody in the party will ever be able to use (armor that
--- unlocks at 40 counts as usable; untrained weapon types count as usable).
-function View:SellUnusable()
-    local keep, sold, copper = {}, 0, 0
+-- Items in the bag that are not an upgrade for anyone (what Sell All sells).
+function View:SellAllCandidates()
+    local sell, copper = {}, 0
     for _, item in ipairs(ns.db.bag) do
-        local usable = false
+        local upgrade = false
         for _, h in ipairs(Heroes()) do
-            local cls = ns.Classes[h.class]
-            local best = cls.armorAt40 or cls.armor
-            local armorOk = not item.armorType or ns.ARMOR_RANK[item.armorType] <= ns.ARMOR_RANK[best]
-            local weaponOk = not item.wtype or cls.weapons[item.wtype]
-            if armorOk and weaponOk then usable = true end
+            local v = ns.Hero.UpgradeValue(h, item)
+            if v and v > 0.5 then upgrade = true break end
         end
-        if usable then
-            keep[#keep + 1] = item
-        else
-            sold = sold + 1
+        if not upgrade then
+            sell[item] = true
             copper = copper + ns.Items.SellValue(item)
         end
     end
+    return sell, copper
+end
+
+function View:ConfirmSellAll()
+    local sell, copper = self:SellAllCandidates()
+    local n = 0
+    for _ in pairs(sell) do n = n + 1 end
+    if n == 0 then
+        ns.Print("Nothing to sell - everything in the bag is an upgrade for someone.")
+        return
+    end
+    StaticPopup_Show("JUMBLA_SELL_ALL", n, ns.FormatMoney(copper))
+end
+
+function View:SellAll()
+    local sell, copper = self:SellAllCandidates()
+    local keep, n = {}, 0
+    for _, item in ipairs(ns.db.bag) do
+        if sell[item] then n = n + 1 else keep[#keep + 1] = item end
+    end
     ns.db.bag = keep
     ns.db.gold = (ns.db.gold or 0) + copper
-    ns.Print("Sold " .. sold .. " item(s) for " .. ns.FormatMoney(copper) .. ".")
+    ns.Print("Sold " .. n .. " item(s) for " .. ns.FormatMoney(copper) .. ".")
     self:Refresh()
 end
+
+StaticPopupDialogs = StaticPopupDialogs or {}
+StaticPopupDialogs["JUMBLA_SELL_ALL"] = {
+    text = "Sell %d item(s) that aren't upgrades for %s?",
+    button1 = YES or "Yes", button2 = NO or "No",
+    OnAccept = function() View:SellAll() end,
+    timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+}
 
 ---------------------------------------------------------------------------
 -- Weapon skills panel (shares the stats frame)
@@ -306,7 +344,7 @@ function View:CreateSkills(parent)
         row.label:SetPoint("LEFT")
         row.value = W.Font(row, "GameFontHighlightSmall", nil, "RIGHT")
         row.value:SetPoint("RIGHT")
-        row.train = W.Button(row, "Train", 56, 18, function(b)
+        row.train = W.Button(row, "Train", 92, 18, function(b)
             local h = self:Selected()
             local ok, why = ns.Hero.Train(h, b.wtype)
             if ok then
@@ -317,11 +355,17 @@ function View:CreateSkills(parent)
             self:Refresh()
         end)
         row.train:SetPoint("RIGHT")
+        if row.train.SetMotionScriptsWhileDisabled then row.train:SetMotionScriptsWhileDisabled(true) end
         row.train:SetScript("OnEnter", function(b)
             local h = self:Selected()
+            local cost, have = ns.Hero.TrainCost(h), ns.db.gold or 0
             GameTooltip:SetOwner(b, "ANCHOR_RIGHT")
             GameTooltip:SetText("Train " .. ns.WEAPON_SKILL_NAMES[b.wtype], 1, 1, 1)
-            GameTooltip:AddLine("Cost: " .. ns.FormatMoney(ns.Hero.TrainCost(h)), 1, 1, 1)
+            GameTooltip:AddLine("Cost: " .. ns.FormatMoney(cost), 1, 1, 1)
+            if have < cost then
+                GameTooltip:AddLine("You have " .. ns.FormatMoney(have) .. " - need " .. ns.FormatMoney(cost - have) .. " more.",
+                    1, 0.3, 0.3, true)
+            end
             GameTooltip:AddLine("Starts at skill 1 and rises as you fight with it. Low skill means more misses.",
                 1, 0.82, 0, true)
             GameTooltip:Show()
@@ -356,6 +400,7 @@ function View:RefreshSkills(h)
             else
                 row.value:Hide()
                 row.train.wtype = wtype
+                row.train:SetText("Train " .. ns.FormatMoneyShort(ns.Hero.TrainCost(h)))
                 row.train:Show()
                 if (ns.db.gold or 0) >= ns.Hero.TrainCost(h) then row.train:Enable() else row.train:Disable() end
             end

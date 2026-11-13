@@ -30,12 +30,13 @@ go, they level up and collect gear.
 
 ## How it plays
 
-1. **Draft.** There are five slots: Tank, Healer, then three DPS. Each slot
-   offers two options and you pick one. Tank and Healer options are two
-   different tank or healer specs. Each DPS option is a different class with a
-   random spec already chosen, for example *Combat Rogue* vs *Fire Mage*. You
-   get **one reroll for the whole draft**, and it replaces the two options in
-   the current slot. The draft is saved, so reloading doesn't give you a new
+1. **Draft.** Pick a Tank, then a Healer, each from two different specs. Then
+   all three DPS rows appear together, each with two options. All six DPS
+   options are different classes with a random spec already chosen, for
+   example *Combat Rogue* vs *Fire Mage*. Click one card per row; you can
+   change your mind until you press **Begin Adventure**. You get **one reroll
+   for the whole draft**, which you can spend on the Tank or Healer options or
+   on any one DPS row. The draft is saved, so reloading doesn't give you a new
    reroll.
 2. **Party.** Shows each hero's stats and gear, plus a shared bag and your
    gold. In the bag, left-click an item to equip it on the selected hero,
@@ -51,13 +52,17 @@ go, they level up and collect gear.
    | The Deadmines | 15 | 15-18 | 11 (7 bosses) |
    | Wailing Caverns | 20 | 21-24 | 12 (8 bosses) |
 
-4. **Battle.** The field is 2D. Heroes are round class icons and enemies are
-   round icons with a red ring (gold for bosses). Units move into range and
-   fight on their own. When a unit uses an ability, its icon pops up above
-   them. Cast bars, floating damage and heal numbers, and party frames are
-   shown. You can pause, play at 1x/2x/4x speed, or retreat. Fallen heroes come
-   back at 30% health between waves. If the whole party dies, the run is over,
-   but you keep the XP and loot you earned.
+4. **Battle.** The field is 2D and painted for each dungeon. Heroes are round
+   class icons, and enemies are round icons with a red ring (gold for bosses).
+   Units move into range and fight on their own, and movement is smoothed so
+   it looks fluid at any speed. When a unit uses an ability, its icon pops up
+   above them. You also get cast bars, floating combat text and party frames.
+   Hover a party frame to see that hero's abilities with live cooldowns, costs
+   and buffs. The meter in the top right shows damage done; click its header
+   to switch to healing done (shield absorbs count). You can pause, play at
+   1x/2x/4x speed, or retreat. Fallen heroes come back at 30% health between
+   waves. If the whole party dies, the run is over, but you keep the XP, gold
+   and loot you earned. Ctrl + mouse wheel resizes the window.
 5. **Flights.** The window opens automatically when you take a flight path and
    pauses when you land. Both can be turned off on the Dungeons tab.
 
@@ -83,7 +88,7 @@ go, they level up and collect gear.
   spec's preferred weapon skill maxed (max = 5 x level). Training another type the class can use costs
   `50s + 5s x level`, starts at 1, and rises as the hero fights with it. Each point below max adds +0.1% miss and
   -0.04% crit. Mages, Priests and Warlocks can use any weapon their class allows without training.
-- **Gold** drops from kills, and items sell from the bag (Shift+Right-click, or **Sell Unusable**). It's spent on
+- **Gold** drops from kills, and items sell from the bag (Shift+Right-click, or **Sell All**, which sells everything that isn't an upgrade for someone). It's spent on
   weapon training.
 - **Abilities:** each spec has one level-10 ability, and tanks also get an AoE Taunt. Every ability has a resource
   cost and a cooldown, and most also trigger the 1.5s global cooldown. Warriors and Guardian Druids use rage, and
@@ -109,6 +114,7 @@ go, they level up and collect gear.
 | `Engine/Combat.lua` | The battle engine, written in pure Lua with no WoW API |
 | `Engine/Loot.lua` | Drops and auto-equip |
 | `UI/*.lua` | Draft, Party, Dungeons and Battle views |
+| `Media/Scenes/*.tga` | Battle backgrounds (1024x512, uncompressed 24-bit TGA) |
 
 To add a dungeon, add an entry in `Data/Dungeons.lua` and its mobs in
 `Data/Mobs.lua`, then add its key to `ns.DUNGEON_ORDER`.
@@ -119,4 +125,6 @@ To add a dungeon, add an entry in `Data/Dungeons.lua` and its mobs in
 lua5.1 tools/sim.lua 100        # simulate 100 fresh drafts RFC -> DM -> WC; win rates + per-spec DPS/HPS
 lua5.1 tools/smoke.lua          # load the whole addon against a stubbed WoW API and click through every screen
 ./tools/package.sh              # build dist/Jumbla.zip for installing
+python3 tools/make_scenes.py    # repaint the battle backgrounds (Media/Scenes/*.tga)
+python3 tools/make_scenes.py --convert my_art.png RFC   # use any image (e.g. a Blender render) as a scene
 ```

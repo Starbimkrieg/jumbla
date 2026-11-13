@@ -42,6 +42,33 @@ function W.Button(parent, text, width, height, onClick)
     return b
 end
 
+-- Mouse-over highlight for Buttons (the HIGHLIGHT layer only shows on hover).
+function W.Highlight(btn, alpha)
+    local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetAllPoints()
+    hl:SetColorTexture(1, 1, 1, alpha or 0.1)
+    return hl
+end
+
+-- Named font objects at a given size (for the bigger battle text).
+local fontCache = {}
+function W.FontObject(size, flags)
+    local key = size .. (flags or "")
+    if fontCache[key] then return fontCache[key] end
+    local f = CreateFont("JumblaFont" .. size .. (flags or ""):gsub(",", ""))
+    f:SetFont(STANDARD_TEXT_FONT or "Fonts\\FRIZQT__.TTF", size, flags or "")
+    fontCache[key] = f
+    return f
+end
+
+function W.Text(parent, size, flags, text, justify)
+    local fs = parent:CreateFontString(nil, "OVERLAY")
+    fs:SetFontObject(W.FontObject(size, flags))
+    if text then fs:SetText(text) end
+    if justify then fs:SetJustifyH(justify) end
+    return fs
+end
+
 function W.Backdrop(frame, r, g, b, a)
     local bg = frame:CreateTexture(nil, "BACKGROUND")
     bg:SetAllPoints()

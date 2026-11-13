@@ -19,7 +19,7 @@ local PREP_TIME = 4
 local REST_TIME = 6
 local REVIVE_PCT = 0.3
 
-ns.FIELD_W, ns.FIELD_H = FIELD_W, FIELD_H
+ns.FIELD_W, ns.FIELD_H, ns.TICK = FIELD_W, FIELD_H, TICK
 
 local random, floor, sqrt, max, min = math.random, math.floor, math.sqrt, math.max, math.min
 
@@ -269,6 +269,8 @@ end
 
 function Run:Step(dt)
     self.time = self.time + dt
+    -- Remember where everyone was so the UI can interpolate between ticks.
+    for _, u in ipairs(self.units) do u.px, u.py = u.x, u.y end
     local snapshot = {}
     for i, u in ipairs(self.units) do snapshot[i] = u end
 
@@ -818,6 +820,7 @@ function Run:Damage(src, dst, amount, opts)
         if a.absorb and a.absorb > 0 and amount > 0 then
             local take = min(a.absorb, amount)
             a.absorb = a.absorb - take
+            if a.source and a.source.healDone then a.source.healDone = a.source.healDone + take end
             amount = amount - take
             absorbed = absorbed + take
             if a.absorb <= 0 then table.remove(dst.auras, i) end

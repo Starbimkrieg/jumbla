@@ -229,6 +229,15 @@ function ns.FormatMoney(copper)
     return c .. "c"
 end
 
+-- Plain-text money (no coin textures), for button labels.
+function ns.FormatMoneyShort(copper)
+    copper = math.floor(copper or 0)
+    local g, sv, c = math.floor(copper / 10000), math.floor(copper / 100) % 100, copper % 100
+    if g > 0 then return sv > 0 and string.format("%dg %ds", g, sv) or (g .. "g") end
+    if sv > 0 then return sv .. "s" end
+    return c .. "c"
+end
+
 -- Melee/ranged weapon types that need a trained weapon skill (melee classes).
 ns.WEAPON_SKILL_NAMES = {
     DAGGER = "Daggers", SWORD = "One-Handed Swords", MACE = "One-Handed Maces", AXE = "One-Handed Axes",

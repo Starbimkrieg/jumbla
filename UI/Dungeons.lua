@@ -48,7 +48,8 @@ end
 
 function View:Create(parent)
     local f = CreateFrame("Frame", nil, parent)
-    f:SetAllPoints()
+    f:SetSize(760, 600)
+    f:SetPoint("TOP", 0, -10)
     self.frame = f
 
     self.header = W.Font(f, "GameFontNormalHuge", "Choose a Dungeon")
