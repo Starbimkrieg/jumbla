@@ -460,7 +460,7 @@ function View:ShowResults()
     r.title:SetText(titles[run.result] or run.result)
 
     local left = { string.format("|cffffd100%s|r  -  %d:%02d, %d kills", run.dungeon.name, run.time / 60,
-        run.time % 60, run.kills), "" }
+        run.time % 60, run.kills), "Gold looted: " .. ns.FormatMoney(run.gold or 0), "" }
     for _, u in ipairs(run.heroUnits) do
         local h = u.hero
         local lv = run.levelUps[h.id]

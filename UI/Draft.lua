@@ -25,6 +25,7 @@ local function CreateCard(parent, index)
     card.role:SetPoint("TOP", card.title, "BOTTOM", 0, -4)
     card.info = W.Font(card, "GameFontHighlightSmall")
     card.info:SetPoint("TOP", card.role, "BOTTOM", 0, -6)
+    card.info:SetWidth(280)
 
     card.abilities = {}
     for i = 1, 3 do
@@ -102,8 +103,13 @@ local function FillCard(card, specKey)
     card.title:SetText("|c" .. W.ClassHex(spec.class) .. ns.SpecLabel(specKey) .. "|r")
     card.role:SetText(W.ROLE_TEXT[spec.role] .. "  -  " .. (spec.position == "MELEE" and "Melee" or "Ranged"))
     local res = spec.resource or cls.resource
-    card.info:SetText(ns.ARMOR_NAMES[cls.armor] .. " armor  |  " .. res:sub(1, 1) .. res:sub(2):lower()
-        .. (spec.pet and ("  |  Pet: " .. ns.Pets[spec.pet].name) or ""))
+    local armor = ns.ARMOR_NAMES[cls.armor] .. (cls.armorAt40 and (" (" .. ns.ARMOR_NAMES[cls.armorAt40] .. " at 40)") or "")
+    local extras = {}
+    if spec.pet then extras[#extras + 1] = "Pet: " .. ns.Pets[spec.pet].name end
+    if cls.dualWield then extras[#extras + 1] = "Dual wield " .. (cls.dualWield <= 10 and "now" or ("at " .. cls.dualWield)) end
+    if cls.weaponSkills then extras[#extras + 1] = "Starts with " .. ns.WEAPON_SKILL_NAMES[spec.mainhand[1]] end
+    card.info:SetText(armor .. "  |  " .. res:sub(1, 1) .. res:sub(2):lower()
+        .. (#extras > 0 and ("\n" .. table.concat(extras, "  |  ")) or ""))
     for i, a in ipairs(card.abilities) do
         local entry = spec.abilities[i]
         if entry then
@@ -112,7 +118,7 @@ local function FillCard(card, specKey)
             a.tex:SetTexture(def.icon)
             a.label:SetText(def.name)
             a:ClearAllPoints()
-            a:SetPoint("TOPLEFT", card, "TOPLEFT", 70, -170 - (i - 1) * 32)
+            a:SetPoint("TOPLEFT", card, "TOPLEFT", 70, -188 - (i - 1) * 30)
             a:Show()
         else
             a:Hide()

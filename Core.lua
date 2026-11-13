@@ -10,6 +10,7 @@ local DEFAULTS = {
     nextId = 1,
     party = nil,          -- { heroes = { hero, hero, ... } } once a draft is finished
     bag = {},             -- shared loot bag (item tables)
+    gold = 0,             -- copper; earned from kills and selling, spent on weapon training
     clears = {},          -- [dungeonKey] = number of clears
     settings = {
         speed = 1,

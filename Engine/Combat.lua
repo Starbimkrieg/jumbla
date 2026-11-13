@@ -373,6 +373,7 @@ function Run:Retreat() self:Finish("retreat") end
 function Run:UnitStep(u, dt, inCombat)
     u.gcd = max(0, u.gcd - dt)
     u.swing = u.swing - dt
+    if u.swingOH then u.swingOH = u.swingOH - dt end
     if u.forcedTimer then u.forcedTimer = u.forcedTimer - dt end
     if u.abilities then for _, ab in ipairs(u.abilities) do ab.cd = max(0, ab.cd - dt) end end
     if u.npcAbilities then for _, ab in ipairs(u.npcAbilities) do ab.cdLeft = ab.cdLeft - dt end end
@@ -783,7 +784,9 @@ function Run:AttackRoll(att, def, opts)
     opts = opts or {}
     local r = random() * 100
     if not opts.noMiss then
-        local miss = 5 + max(0, (def.level or 1) - (att.level or 1)) * 1.5
+        -- Low weapon skill: +0.1% miss per point below max. Dual-wield white swings: +16% miss.
+        local miss = 5 + max(0, (def.level or 1) - (att.level or 1)) * 1.5 + (opts.deficit or 0) * 0.1
+            + (opts.dualWield and 16 or 0)
         if r < miss then return "miss" end
         r = r - miss
         if not opts.ranged then
@@ -795,7 +798,7 @@ function Run:AttackRoll(att, def, opts)
     local block = opts.ranged and 0 or self:BlockChance(def)
     if r < block then return "block" end
     r = r - block
-    if r < (att.stats.meleeCrit or 5) then return "crit" end
+    if r < max(0, (att.stats.meleeCrit or 5) - (opts.deficit or 0) * 0.04) then return "crit" end
     return "hit"
 end
 
@@ -829,7 +832,7 @@ function Run:Damage(src, dst, amount, opts)
             dst.threat[src.id] = (dst.threat[src.id] or 0) + (amount + absorbed) * (src.threatMod or 1)
         end
         if src.resource == "RAGE" and opts.melee then
-            src.power = min(src.maxPower, src.power + amount / RageConversion(src.level) * 7.5)
+            src.power = min(src.maxPower, src.power + amount / RageConversion(src.level) * 10)
         end
         if dst.resource == "RAGE" then
             dst.power = min(dst.maxPower, dst.power + (amount + absorbed) / RageConversion(dst.level) * 2.5)
@@ -858,8 +861,7 @@ function Run:PhysicalDamage(src, dst, amount, name, opts)
         amount = amount - self:BlockValue(dst)
         if amount <= 0 then self:Emit("miss", dst, "block") return true end
     end
-    self:Damage(src, dst, amount, { school = opts.school or "physical", crit = roll == "crit", melee = opts.melee, name = name })
-    return true
+    return self:Damage(src, dst, amount, { school = opts.school or "physical", crit = roll == "crit", melee = opts.melee, name = name })
 end
 
 local function WeaponRoll(run, u, w)
@@ -877,22 +879,46 @@ function Run:WeaponStrike(c, t, bonus, name, opts)
     else
         amount = WeaponRoll(self, c, c.stats.weapon) + bonus
     end
-    return self:PhysicalDamage(c, t, amount, name, { melee = true })
+    return self:PhysicalDamage(c, t, amount, name, { melee = true, deficit = c.stats.weapon.deficit })
 end
 
 function Run:AutoAttack(u, t)
-    if u.swing > 0 then return end
     local ranged = u.ranged
+    local oh = not ranged and u.stats.offWeapon
+    if oh then
+        if not u.swingOH then u.swingOH = 0.3 end -- staggered from the main hand; ticked in UnitStep
+        if u.swingOH <= 0 then
+            u.swingOH = oh.speed / self:Haste(u)
+            self:Swing(u, t, false, oh, true)
+        end
+    end
+    if u.swing > 0 then return end
     local w = ranged and u.stats.rangedWeapon or u.stats.weapon
     if not w then return end
     u.swing = w.speed / self:Haste(u)
     self:Swing(u, t, ranged, w)
 end
 
-function Run:Swing(u, t, ranged, w)
+-- Weapon skill rises with use (persisted on the hero).
+function Run:SkillUp(u, w)
+    if u.kind ~= "hero" or not w.wtype then return end
+    local v = ns.Hero.SkillUp(u.hero, w.wtype)
+    if v then
+        w.deficit = max(0, ns.Hero.MaxSkill(u.hero) - v)
+        if v % 10 == 0 or w.deficit == 0 then
+            self:Emit("log", u, string.format("%s's %s skill increased to %d.", u.name,
+                ns.WEAPON_SKILL_NAMES[w.wtype], v))
+        end
+    end
+end
+
+function Run:Swing(u, t, ranged, w, offhand)
     local dmg = WeaponRoll(self, u, w)
     local name
-    if not ranged then
+    self:SkillUp(u, w)
+    if offhand then
+        dmg = dmg * 0.5
+    elseif not ranged then
         if u.queuedStrike then
             dmg = dmg + u.queuedStrike.bonus
             name = u.queuedStrike.name
@@ -908,8 +934,10 @@ function Run:Swing(u, t, ranged, w)
         self:Damage(u, t, crit and dmg * 1.5 or dmg, { school = w.school, crit = crit, name = "Shoot" })
         return
     end
-    local hit = self:PhysicalDamage(u, t, dmg, name or "Attack", { melee = not ranged, ranged = ranged })
-    if hit and not ranged then
+    local dualWield = not ranged and u.stats.offWeapon ~= nil and not name
+    local hit = self:PhysicalDamage(u, t, dmg, name or (offhand and "Off-hand" or "Attack"),
+        { melee = not ranged, ranged = ranged, deficit = w.deficit, dualWield = dualWield })
+    if hit and not ranged and not offhand then
         for _, a in ipairs(u.auras) do
             local os = a.onSwing
             if os and os.holyPerSpeed and not t.dead then
@@ -1060,6 +1088,9 @@ end
 
 function Run:OnEnemyKilled(m)
     self.kills = self.kills + 1
+    local coins = floor(m.level * (m.boss and rnd(40, 60) or rnd(4, 8)))
+    self.gold = (self.gold or 0) + coins
+    ns.db.gold = (ns.db.gold or 0) + coins
     local base = (m.level * 4 + 10) * (m.boss and 3 or 1)
     for _, u in ipairs(self.heroUnits) do
         local f = ns.Clamp(1 - (u.hero.level - m.level) * 0.15, 0.1, 1.3)

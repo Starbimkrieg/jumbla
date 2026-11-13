@@ -7,15 +7,25 @@ go, they level up and collect gear.
 > Draft / prototype. The numbers come from the headless simulator in `tools/`.
 > They have not been tested in the game client yet.
 
-## Install
+## Install and test in game
 
-Copy this folder into `World of Warcraft/_<flavor>_/Interface/AddOns/` and
-rename it to **`Jumbla`** so it matches `Jumbla.toc`. Type `/jumbla` (or `/jb`)
-in game to open it.
+1. **Get the files.** Either run `./tools/package.sh`, which builds `dist/Jumbla.zip` with a correctly named
+   `Jumbla` folder inside, or download this branch from GitHub (Code > Download ZIP) and rename the extracted folder
+   to `Jumbla`.
+2. **Put the folder in your AddOns directory.** Use the flavor you play:
+   - Retail: `World of Warcraft/_retail_/Interface/AddOns/Jumbla/`
+   - Classic Era / Anniversary: `World of Warcraft/_classic_era_/Interface/AddOns/Jumbla/`
+   - Progression Classic: `World of Warcraft/_classic_/Interface/AddOns/Jumbla/`
 
-The `## Interface:` line in the TOC lists several client versions. If the
-addon shows as out of date, run `/dump select(4, GetBuildInfo())` and put that
-number in the TOC.
+   `Jumbla.toc` must sit directly inside `Jumbla/`, not in a nested `Jumbla/Jumbla/`.
+3. **Start the game, or `/reload` if you're already logged in.** On the character select screen, open **AddOns** and
+   check that *Jumbla: Dungeon Draft* is enabled. If it says "Out of date", either tick **Load out of date AddOns**,
+   or run `/dump select(4, GetBuildInfo())` in game and put that number on the `## Interface:` line of `Jumbla.toc`.
+4. **Open it with `/jumbla` or `/jb`.** It also opens by itself when you take a flight path.
+5. **See errors.** Run `/console scriptErrors 1` once so Lua errors pop up, or install BugGrabber + BugSack. After
+   you edit a file, `/reload` picks up the change. Adding new files needs a full game restart.
+6. **Reset everything.** Run `/jumbla reset`. Saved data lives in
+   `WTF/Account/<ACCOUNT>/SavedVariables/Jumbla.lua`.
 
 ## How it plays
 
@@ -26,10 +36,11 @@ number in the TOC.
    get **one reroll for the whole draft**, and it replaces the two options in
    the current slot. The draft is saved, so reloading doesn't give you a new
    reroll.
-2. **Party.** Shows each hero's stats and gear, plus a shared bag. Click an
-   item in the bag to equip it on the selected hero, or use **Auto-Equip
-   Upgrades**. Items marked with a green `+` are upgrades for the selected
-   hero.
+2. **Party.** Shows each hero's stats and gear, plus a shared bag and your
+   gold. In the bag, left-click an item to equip it on the selected hero,
+   right-click to put a one-hander in the off hand, and Shift+Right-click to
+   sell. **Auto-Equip Upgrades** does it for you, and a green `+` marks an
+   upgrade. Use **Weapon Skills** on the stats panel to see and train skills.
 3. **Dungeons.** A dungeon unlocks when your party's average level reaches its
    requirement:
 
@@ -51,27 +62,38 @@ number in the TOC.
 
 ## Rules implemented
 
-- **Primary stats:** Agility gives melee crit, armor and dodge. Strength gives
-  melee attack power and block value. Intellect gives mana and spell crit.
-  Stamina gives health. Spirit gives mana and health regen.
-- **Secondary stats** come from level and gear: health, mana, armor, crit,
-  spell power and healing. Every hero starts at level 10, gains stats each
-  level, and the level cap is 30.
-- **Armor:** every armor piece has armor. Cloth, leather, mail and plate are
-  roughly 1x, 2x, 4x and 7x at the same item level.
-- **Weapons:** each weapon has a damage range and a swing speed. Daggers are
-  about 1.6-1.9s, one-handers about 2.3-2.8s, two-handers about 2.9-3.7s, and
-  there are wands, bows and guns. Shields add armor and block.
-- **Abilities:** each spec has one level-10 ability, and tanks also get an AoE
-  Taunt. Every ability has a resource cost and a cooldown, and most also
-  trigger the 1.5s global cooldown. Ability damage grows with level, standing
-  in for spell ranks.
-- **Threat:** enemies attack whoever has the most threat. Tanks generate 2.5x
-  threat and use Taunt when an enemy turns on someone else. Healing creates
-  threat too.
-- **Loot:** trash has an 18% chance to drop an item and bosses always drop.
-  Items use classic "of the Bear / Owl / Eagle..." suffixes and are usually
-  rolled for someone in your party. Some bosses also drop named blue items.
+- **Primary stats:** Agility gives melee crit, armor and dodge. Strength gives block value. Intellect gives mana and
+  spell crit. Stamina gives health. Spirit gives mana and health regen.
+- **Attack power:** for Agility specs (all Rogues and Hunters, and Feral Druids) it's 2 per Agility plus 1 per
+  Strength. For everyone else it's 2 per Strength.
+- **Defense rating** comes from gear ("of Defense") and gives +0.25% block chance per point when a shield is
+  equipped. Base block chance with a shield is 5%. Shield Block adds +15% block chance and extra block value for
+  5 seconds.
+- **Secondary stats** come from level and gear: health, mana, armor, crit, spell power and healing. Heroes start at
+  level 10. The level cap is currently 30.
+- **Armor progression:** cloth, leather, mail and plate are roughly 1x, 2x, 4x and 7x armor at the same item level.
+  Warriors and Paladins wear mail and unlock plate at 40. Hunters and Shamans wear leather and unlock mail at 40.
+  Rogues and Druids wear leather, and Mages, Priests and Warlocks wear cloth. Loot only rolls armor someone in the
+  party can wear now.
+- **Weapons:** every weapon has a damage range and a swing speed. Shields add armor and block.
+- **Dual wield:** Rogues can dual wield from level 10, and Warriors and Hunters from level 20. Off-hand swings run on
+  their own timer and do 50% damage. White (auto-attack) swings miss 16% more often while dual wielding.
+- **Weapon skills (melee classes: Warrior, Paladin, Rogue, Hunter, Shaman, Druid):** each hero starts with their
+  spec's preferred weapon skill maxed (max = 5 x level). Training another type the class can use costs
+  `50s + 5s x level`, starts at 1, and rises as the hero fights with it. Each point below max adds +0.1% miss and
+  -0.04% crit. Mages, Priests and Warlocks can use any weapon their class allows without training.
+- **Gold** drops from kills, and items sell from the bag (Shift+Right-click, or **Sell Unusable**). It's spent on
+  weapon training.
+- **Abilities:** each spec has one level-10 ability, and tanks also get an AoE Taunt. Every ability has a resource
+  cost and a cooldown, and most also trigger the 1.5s global cooldown. Warriors and Guardian Druids use rage, and
+  Rogues and Feral Druids use energy. Fury uses **Bloodthirst** (an instant strike for 45% of attack power plus a
+  bonus, healing for 20% of the damage dealt). Fire Mages use **Fireball** (a hit plus a short burn).
+- **Threat:** enemies attack whoever has the most threat. Tanks generate 2.5x threat and Taunt anything that turns on
+  someone else. Healing creates threat too.
+- **Revives and wipes:** fallen heroes come back at 30% health between waves. If the whole party dies, the run ends,
+  but you keep the XP, gold and loot you earned.
+- **Loot:** trash has an 18% chance to drop an item and bosses always drop. Items use classic suffixes and are mostly
+  rolled for a party member's armor type and trained weapons. Some bosses also drop named blue items.
 
 ## Code layout
 
@@ -95,4 +117,5 @@ To add a dungeon, add an entry in `Data/Dungeons.lua` and its mobs in
 ```bash
 lua5.1 tools/sim.lua 100        # simulate 100 fresh drafts RFC -> DM -> WC; win rates + per-spec DPS/HPS
 lua5.1 tools/smoke.lua          # load the whole addon against a stubbed WoW API and click through every screen
+./tools/package.sh              # build dist/Jumbla.zip for installing
 ```

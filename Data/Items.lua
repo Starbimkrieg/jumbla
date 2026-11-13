@@ -74,9 +74,10 @@ ns.SUFFIXES = {
     WRATH     = { name = "of Wrath", stats = { sp = 1 } },
     SORCERY   = { name = "of Sorcery", stats = { int = 1, sp = 1 } },
     HEALING   = { name = "of Healing", stats = { heal = 1 } },
+    DEFENSE   = { name = "of Defense", stats = { sta = 1, def = 1 } },
 }
 -- How much item budget one point of a stat costs.
-local STAT_COST = { str = 1, agi = 1, sta = 1, int = 1, spi = 1, sp = 1.4, heal = 0.75 }
+local STAT_COST = { str = 1, agi = 1, sta = 1, int = 1, spi = 1, sp = 1.4, heal = 0.75, def = 1 }
 
 ns.QUALITY_COLORS = {
     [0] = { 0.62, 0.62, 0.62, "ff9d9d9d" },
@@ -214,8 +215,31 @@ function Items.DPS(item)
     return 0
 end
 
--- Score an item for a spec using its stat weights.
-function Items.Score(item, specKey)
+-- Vendor price in copper.
+function Items.SellValue(item)
+    return math.floor(item.ilvl * ((item.quality or 1) + 1) ^ 2 * 2 + 1)
+end
+
+function ns.FormatMoney(copper)
+    copper = math.floor(copper or 0)
+    if GetCoinTextureString then return GetCoinTextureString(copper) end
+    local g, sv, c = math.floor(copper / 10000), math.floor(copper / 100) % 100, copper % 100
+    if g > 0 then return string.format("%dg %ds %dc", g, sv, c) end
+    if sv > 0 then return string.format("%ds %dc", sv, c) end
+    return c .. "c"
+end
+
+-- Melee/ranged weapon types that need a trained weapon skill (melee classes).
+ns.WEAPON_SKILL_NAMES = {
+    DAGGER = "Daggers", SWORD = "One-Handed Swords", MACE = "One-Handed Maces", AXE = "One-Handed Axes",
+    SWORD2H = "Two-Handed Swords", AXE2H = "Two-Handed Axes", MACE2H = "Two-Handed Maces", STAFF = "Staves",
+    BOW = "Bows", GUN = "Guns",
+}
+ns.WEAPON_SKILL_ORDER = { "DAGGER", "SWORD", "MACE", "AXE", "SWORD2H", "AXE2H", "MACE2H", "STAFF", "BOW", "GUN" }
+
+-- Score an item for a spec using its stat weights. slot = where it would go
+-- (a weapon in the off hand only counts half its damage).
+function Items.Score(item, specKey, slot)
     if not item then return 0 end
     local w = ns.Specs[specKey].weights
     local s = 0
@@ -224,7 +248,8 @@ function Items.Score(item, specKey)
     s = s + (item.block or 0) * (w.block or 0)
     if item.min then
         local key = item.slot == "RANGED" and "rdps" or "wdps"
-        s = s + Items.DPS(item) * (w[key] or 0)
+        local mult = (slot == "OFFHAND") and 0.5 or 1
+        s = s + Items.DPS(item) * (w[key] or 0) * mult
     end
     return s
 end
@@ -252,10 +277,17 @@ function Items.TooltipLines(item)
     if item.stats and item.stats.sp then
         lines[#lines + 1] = { "Equip: Increases damage and healing done by spells by up to " .. item.stats.sp .. ".", 0.12, 1, 0 }
     end
+    if item.stats and item.stats.def then
+        lines[#lines + 1] = { "Equip: Increases defense rating by " .. item.stats.def .. ".", 0.12, 1, 0 }
+    end
     if item.stats and item.stats.heal then
         lines[#lines + 1] = { "Equip: Increases healing done by spells by up to " .. item.stats.heal .. ".", 0.12, 1, 0 }
     end
+    if item.wtype and ns.WEAPON_SKILL_NAMES[item.wtype] then
+        lines[#lines + 1] = { "Weapon skill: " .. ns.WEAPON_SKILL_NAMES[item.wtype], 0.7, 0.7, 0.7 }
+    end
     lines[#lines + 1] = { "Requires Level " .. item.reqLevel }
     lines[#lines + 1] = { "Item Level " .. item.ilvl, 1, 0.82, 0 }
+    lines[#lines + 1] = { "Sell price: " .. ns.FormatMoney(Items.SellValue(item)), 1, 1, 1 }
     return lines
 end

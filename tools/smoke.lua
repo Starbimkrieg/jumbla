@@ -99,7 +99,49 @@ b._scripts.OnClick(b, "LeftButton")
 party.slotRows.HEAD._scripts.OnEnter(party.slotRows.HEAD)
 party.slotRows.HEAD._scripts.OnClick(party.slotRows.HEAD, "RightButton")
 party.rows[3]._scripts.OnClick()
-party:DiscardUnusable()
+party:SellUnusable()
+
+-- weapon skills: train a new type, then check it can be equipped
+local h = ns.db.party.heroes[1]
+ns.Views.party.selected = 1
+ns.db.gold = 100000
+local trainable = ns.Hero.Trainable(h)
+if #trainable > 0 then
+    local wtype = trainable[1]
+    local axe = ns.Items.Generate({ ilvl = 10, quality = 2, wtype = wtype })
+    assert(not ns.Hero.CanEquip(h, axe), "untrained weapon should be blocked")
+    party.showSkills = true
+    party:Refresh()
+    for _, row in ipairs(party.skillRows) do
+        if row.train.wtype == wtype and row.train:IsShown() then row.train._scripts.OnClick(row.train) end
+    end
+    assert(h.weaponSkills[wtype] == 1, "training failed")
+    assert(ns.Hero.CanEquip(h, axe), "trained weapon should be allowed")
+    print("trained", ns.WEAPON_SKILL_NAMES[wtype], "gold left", ns.db.gold)
+    party.showSkills = false
+end
+
+-- dual wield: a level 10 rogue can, a level 10 warrior can't
+local rogue = ns.Hero.Create("ROGUE_COMBAT", {})
+local warrior = ns.Hero.Create("WARRIOR_FURY", {})
+local dagger = ns.Items.Generate({ ilvl = 9, quality = 2, wtype = "DAGGER" })
+rogue.weaponSkills.DAGGER = 50
+assert(ns.Hero.CanEquip(rogue, dagger, "OFFHAND"))
+assert(ns.Hero.Compute(rogue).offWeapon, "rogue starter gear should dual wield")
+warrior.weaponSkills.DAGGER = 50
+assert(not ns.Hero.CanEquip(warrior, dagger, "OFFHAND"), "warriors dual wield at 20")
+warrior.level = 20
+assert(ns.Hero.CanEquip(warrior, dagger, "OFFHAND"))
+-- armor: plate locked until 40, hunters in leather
+local plate = ns.Items.Generate({ ilvl = 10, quality = 2, slot = "CHEST", armorType = "PLATE" })
+local ok, why = ns.Hero.CanEquip(warrior, plate)
+assert(not ok and why:find("40"), why)
+warrior.level = 40
+assert(ns.Hero.CanEquip(warrior, plate))
+assert(ns.Hero.ArmorType(ns.Hero.Create("HUNTER_MM", {})) == "LEATHER")
+-- agility attack power
+local d = ns.Hero.Compute(rogue)
+assert(d.ap == d.agi * 2 + d.str, "rogue AP should be 2*agi + str")
 
 -- retreat path + taxi landing pause
 ns.UI:StartBattle("RFC")

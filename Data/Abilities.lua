@@ -88,13 +88,13 @@ A.FROSTBOLT = {
     end,
 }
 
-A.FIRE_BOLT = {
-    name = "Fire Bolt", icon = I .. "Spell_Fire_FireBolt", kind = "spell", school = "fire",
+A.FIREBALL = {
+    name = "Fireball", icon = I .. "Spell_Fire_FlameBolt", kind = "spell", school = "fire",
     cost = 30, cd = 0, cast = 2.25, range = 30, ai = "nuke",
-    desc = "Fire damage, then additional fire damage over 4 sec.",
+    desc = "Hurls a fiery ball for fire damage, then additional fire damage over 4 sec.",
     execute = function(run, c, t)
-        run:SpellDamage(c, t, run:Rnd(20, 25) * S(c), 0.6, "fire", "Fire Bolt")
-        run:ApplyDot(c, t, { key = "FIRE_BOLT", name = "Fire Bolt", icon = A.FIRE_BOLT.icon, school = "fire",
+        run:SpellDamage(c, t, run:Rnd(20, 25) * S(c), 0.6, "fire", "Fireball")
+        run:ApplyDot(c, t, { key = "FIREBALL", name = "Fireball", icon = A.FIREBALL.icon, school = "fire",
             total = 6 * S(c), duration = 4, interval = 2, coef = 0.05 })
     end,
 }
@@ -190,17 +190,18 @@ A.HEROIC_STRIKE = {
     cost = 15, cd = 0, cast = 0, range = "melee", ai = "nextswing", offGCD = true,
     desc = "Your next melee swing deals bonus damage.",
     execute = function(run, c)
-        c.queuedStrike = { bonus = 22 * S(c), name = "Heroic Strike" }
+        c.queuedStrike = { bonus = 30 * S(c), name = "Heroic Strike" }
     end,
 }
 
-A.BLOODLUST = {
-    name = "Bloodlust", icon = I .. "Spell_Nature_BloodLust", kind = "melee", school = "physical",
-    cost = 20, cd = 20, cast = 0, range = "self", ai = "selfbuff", aura = "BLOODLUST", combatOnly = true,
-    desc = "Increases your attack speed by 40% for 12 sec.",
-    execute = function(run, c)
-        run:ApplyAura(c, { key = "BLOODLUST", source = c, name = "Bloodlust", icon = A.BLOODLUST.icon,
-            duration = 12, mods = { hasteMult = 1.4 } })
+A.BLOODTHIRST = {
+    name = "Bloodthirst", icon = I .. "Spell_Nature_BloodLust", kind = "melee", school = "physical",
+    cost = 30, cd = 6, cast = 0, range = "melee", ai = "nuke",
+    desc = "Instantly attack for 45% of your attack power plus a bonus, healing you for 20% of the damage dealt.",
+    execute = function(run, c, t)
+        local dealt = run:PhysicalDamage(c, t, run:AP(c) * 0.45 + 18 * S(c), "Bloodthirst",
+            { melee = true, deficit = c.stats.weapon.deficit })
+        if dealt and dealt > 0 then run:Heal(c, c, dealt * 0.2, 0, "Bloodthirst") end
     end,
 }
 
@@ -220,10 +221,10 @@ A.TAUNT = {
 A.SHIELD_BLOCK = {
     name = "Shield Block", icon = I .. "Ability_Defend", kind = "melee", school = "physical",
     cost = 10, cd = 6, cast = 0, range = "self", ai = "defensive", offGCD = true, needsShield = true,
-    desc = "For 5 sec, increases your shield's block value and block chance.",
+    desc = "For 5 sec, increases your shield's block value and your block chance by 15%.",
     execute = function(run, c)
         run:ApplyAura(c, { key = "SHIELD_BLOCK", source = c, name = "Shield Block", icon = A.SHIELD_BLOCK.icon,
-            duration = 5, mods = { blockValue = 20 * S(c), blockChance = 50 } })
+            duration = 5, mods = { blockValue = 20 * S(c), blockChance = 15 } })
     end,
 }
 

@@ -9,42 +9,64 @@ local TARGETED_CHANCE = 0.75   -- most drops are rolled for someone in the party
 
 local function pick(t) return t[math.random(#t)] end
 
+-- Weapon types a hero would actually use in a slot: for melee classes, the
+-- skills they have trained (mostly); otherwise the spec's list.
+local function WeaponChoices(h, list, ranged)
+    if not ns.Hero.UsesWeaponSkills(h) or math.random() < 0.2 then return list end
+    local cls = ns.Classes[h.class]
+    local out = {}
+    for wtype in pairs(h.weaponSkills or {}) do
+        local isRanged = ns.WEAPON_TYPES[wtype].hand == "RANGED"
+        if cls.weapons[wtype] and isRanged == (ranged or false) then out[#out + 1] = wtype end
+    end
+    table.sort(out)
+    return #out > 0 and out or list
+end
+
 -- Build generation options aimed at one hero's spec.
 local function OptionsFor(h, ilvl, quality)
     local spec = ns.Specs[h.spec]
-    local cls = ns.Classes[h.class]
+    local wear = ns.Hero.ArmorType(h)
     local slots = { "HEAD", "SHOULDER", "CHEST", "HANDS", "LEGS", "FEET", "MAINHAND", "MAINHAND" }
     if spec.offhand then slots[#slots + 1] = "OFFHAND" end
     if spec.ranged then slots[#slots + 1] = "RANGED" end
     local slot = pick(slots)
     local opts = { ilvl = ilvl, quality = quality, suffix = pick(spec.suffixes) }
     if slot == "MAINHAND" then
-        opts.wtype = pick(spec.mainhand)
+        opts.wtype = pick(WeaponChoices(h, spec.mainhand))
     elseif slot == "OFFHAND" then
         opts.wtype = pick(spec.offhand)
     elseif slot == "RANGED" then
-        opts.wtype = pick(spec.ranged)
+        opts.wtype = pick(WeaponChoices(h, spec.ranged, true))
     else
         opts.slot = slot
-        opts.armorType = cls.armor
-        if math.random() < 0.15 and ns.ARMOR_RANK[cls.armor] > 1 then
+        opts.armorType = wear
+        if math.random() < 0.15 and ns.ARMOR_RANK[wear] > 1 then
             for k, r in pairs(ns.ARMOR_RANK) do
-                if r == ns.ARMOR_RANK[cls.armor] - 1 then opts.armorType = k end
+                if r == ns.ARMOR_RANK[wear] - 1 then opts.armorType = k end
             end
         end
     end
-    if opts.wtype == "SHIELD" or opts.wtype == "HELD" then opts.suffix = pick(spec.suffixes) end
     return opts
 end
 
-local function RandomOptions(ilvl, quality)
+local function RandomOptions(heroes, ilvl, quality)
     if math.random() < 0.3 then
         local types = {}
         for k in pairs(ns.WEAPON_TYPES) do types[#types + 1] = k end
         table.sort(types)
         return { ilvl = ilvl, quality = quality, wtype = pick(types) }
     end
-    return { ilvl = ilvl, quality = quality }
+    -- Only armor types someone in the party can wear right now.
+    local wearable, seen = {}, {}
+    for _, h in ipairs(heroes) do
+        local rank = ns.ARMOR_RANK[ns.Hero.ArmorType(h)]
+        for k, r in pairs(ns.ARMOR_RANK) do
+            if r <= rank and not seen[k] then seen[k] = true wearable[#wearable + 1] = k end
+        end
+    end
+    table.sort(wearable)
+    return { ilvl = ilvl, quality = quality, armorType = #wearable > 0 and pick(wearable) or nil }
 end
 
 function Loot.RollItem(heroes, ilvl, quality)
@@ -52,7 +74,7 @@ function Loot.RollItem(heroes, ilvl, quality)
     if #heroes > 0 and math.random() < TARGETED_CHANCE then
         opts = OptionsFor(pick(heroes), ilvl, quality)
     else
-        opts = RandomOptions(ilvl, quality)
+        opts = RandomOptions(heroes, ilvl, quality)
     end
     return ns.Items.Generate(opts)
 end
@@ -86,14 +108,14 @@ function Loot.AutoEquip(heroes, bag)
         changed = false
         for i = #bag, 1, -1 do
             local item = bag[i]
-            local best, bestValue = nil, 0.5
+            local best, bestValue, bestSlot = nil, 0.5, nil
             for _, h in ipairs(heroes) do
-                local v = ns.Hero.UpgradeValue(h, item)
-                if v and v > bestValue then best, bestValue = h, v end
+                local v, slot = ns.Hero.UpgradeValue(h, item)
+                if v and v > bestValue then best, bestValue, bestSlot = h, v, slot end
             end
             if best then
                 table.remove(bag, i)
-                for _, old in ipairs(ns.Hero.Equip(best, item)) do bag[#bag + 1] = old end
+                for _, old in ipairs(ns.Hero.Equip(best, item, bestSlot)) do bag[#bag + 1] = old end
                 equipped[#equipped + 1] = { hero = best, item = item }
                 changed = true
                 break

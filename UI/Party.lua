@@ -115,17 +115,26 @@ function View:Create(parent)
     self.statRight = W.Font(stats, "GameFontHighlightSmall", nil, "RIGHT")
     self.statRight:SetPoint("TOPRIGHT", -8, -28)
     self.statRight:SetSpacing(3)
+    self.statLeft:SetSpacing(2)
+    self.statRight:SetSpacing(2)
     self.abilityButtons = {}
     for i = 1, 3 do
         local a = CreateFrame("Button", nil, stats)
-        a:SetSize(26, 26)
-        a:SetPoint("BOTTOMLEFT", 8 + (i - 1) * 30, 8)
+        a:SetSize(20, 20)
+        a:SetPoint("TOPRIGHT", -6 - (i - 1) * 23, -4)
         a.tex = a:CreateTexture(nil, "ARTWORK")
         a.tex:SetAllPoints()
         a:SetScript("OnEnter", function(s) W.AbilityTooltip(s, s.abilityId) end)
         a:SetScript("OnLeave", W.HideTooltip)
         self.abilityButtons[i] = a
     end
+    self.statsFrame = stats
+    self.skillsToggle = W.Button(stats, "Weapon Skills", 110, 20, function()
+        self.showSkills = not self.showSkills
+        self:Refresh()
+    end)
+    self.skillsToggle:SetPoint("BOTTOMRIGHT", -6, 6)
+    self:CreateSkills(stats)
 
     -- Equipment column
     self.slotRows = {}
@@ -143,7 +152,7 @@ function View:Create(parent)
     self.bagTitle = W.Font(bag, "GameFontNormal", nil, "LEFT")
     self.bagTitle:SetPoint("TOPLEFT", 8, -8)
     self.bagHint = W.Font(bag, "GameFontDisableSmall",
-        "Click: equip on selected hero   Shift+Right-click: discard", "LEFT")
+        "Click: equip   Right-click: equip off hand   Shift+Right-click: sell", "LEFT")
     self.bagHint:SetPoint("LEFT", self.bagTitle, "RIGHT", 12, 0)
 
     local auto = W.Button(bag, "Auto-Equip Upgrades", 150, 22, function()
@@ -152,7 +161,7 @@ function View:Create(parent)
         self:Refresh()
     end)
     auto:SetPoint("TOPRIGHT", -8, -4)
-    local junk = W.Button(bag, "Discard Unusable", 130, 22, function() self:DiscardUnusable() end)
+    local junk = W.Button(bag, "Sell Unusable", 120, 22, function() self:SellUnusable() end)
     junk:SetPoint("RIGHT", auto, "LEFT", -6, 0)
 
     self.bagButtons = {}
@@ -168,6 +177,8 @@ function View:Create(parent)
     self.next:SetPoint("BOTTOMRIGHT", -8, 8)
     self.pageText = W.Font(bag, "GameFontHighlightSmall")
     self.pageText:SetPoint("RIGHT", self.prev, "LEFT", -8, 0)
+    self.goldText = W.Font(bag, "GameFontHighlight", nil, "LEFT")
+    self.goldText:SetPoint("BOTTOMLEFT", 10, 12)
 end
 
 ---------------------------------------------------------------------------
@@ -185,8 +196,17 @@ function View:BagTooltip(btn)
             extra[#extra + 1] = { "Click: equip on " .. h.name }
             local cur = h.gear[item.slot]
             if cur then extra[#extra + 1] = { "Currently: " .. cur.name, 0.7, 0.7, 0.7 } end
+            if item.hand == "1H" then
+                local okOH, whyOH = ns.Hero.CanEquip(h, item, "OFFHAND")
+                extra[#extra + 1] = okOH and { "Right-click: equip in off hand" } or { whyOH, 0.7, 0.7, 0.7 }
+            end
         else
             extra[#extra + 1] = { reason, 1, 0.2, 0.2 }
+        end
+        local skill = item.wtype and ns.Hero.UsesWeaponSkills(h) and ns.WEAPON_SKILL_NAMES[item.wtype]
+            and ns.Hero.Skill(h, item.wtype)
+        if skill then
+            extra[#extra + 1] = { string.format("%s skill: %d / %d", h.name, skill, ns.Hero.MaxSkill(h)), 0.7, 0.7, 0.7 }
         end
     end
     -- Who would want it?
@@ -194,7 +214,7 @@ function View:BagTooltip(btn)
         local v = ns.Hero.UpgradeValue(other, item)
         if v and v > 0.5 then extra[#extra + 1] = { "Upgrade for " .. other.name, 0.2, 1, 0.2 } end
     end
-    extra[#extra + 1] = { "Shift+Right-click: discard", 0.6, 0.6, 0.6 }
+    extra[#extra + 1] = { "Shift+Right-click: sell", 0.6, 0.6, 0.6 }
     W.ItemTooltip(btn, item, extra)
 end
 
@@ -202,17 +222,21 @@ function View:BagClick(btn, button)
     local item = btn.item
     if not item then return end
     if button == "RightButton" and IsShiftKeyDown() then
-        for i, it in ipairs(ns.db.bag) do
-            if it == item then table.remove(ns.db.bag, i) break end
-        end
+        self:Sell(item)
         W.HideTooltip()
         self:Refresh()
         return
     end
-    if button ~= "LeftButton" then return end
+    local slot = item.slot
+    if button == "RightButton" then
+        if item.hand ~= "1H" then return end   -- right-click puts a one-hander in the off hand
+        slot = "OFFHAND"
+    elseif button ~= "LeftButton" then
+        return
+    end
     local h = self:Selected()
     if not h then return end
-    local ok, reason = ns.Hero.CanEquip(h, item)
+    local ok, reason = ns.Hero.CanEquip(h, item, slot)
     if not ok then
         ns.Print(reason)
         return
@@ -220,26 +244,125 @@ function View:BagClick(btn, button)
     for i, it in ipairs(ns.db.bag) do
         if it == item then table.remove(ns.db.bag, i) break end
     end
-    for _, old in ipairs(ns.Hero.Equip(h, item)) do table.insert(ns.db.bag, old) end
+    for _, old in ipairs(ns.Hero.Equip(h, item, slot)) do table.insert(ns.db.bag, old) end
     W.HideTooltip()
     self:Refresh()
 end
 
-function View:DiscardUnusable()
-    local keep, removed = {}, 0
+function View:Sell(item)
+    for i, it in ipairs(ns.db.bag) do
+        if it == item then
+            table.remove(ns.db.bag, i)
+            ns.db.gold = (ns.db.gold or 0) + ns.Items.SellValue(item)
+            return
+        end
+    end
+end
+
+-- Sells items nobody in the party will ever be able to use (armor that
+-- unlocks at 40 counts as usable; untrained weapon types count as usable).
+function View:SellUnusable()
+    local keep, sold, copper = {}, 0, 0
     for _, item in ipairs(ns.db.bag) do
         local usable = false
         for _, h in ipairs(Heroes()) do
             local cls = ns.Classes[h.class]
-            local armorOk = not item.armorType or ns.ARMOR_RANK[item.armorType] <= ns.ARMOR_RANK[cls.armor]
+            local best = cls.armorAt40 or cls.armor
+            local armorOk = not item.armorType or ns.ARMOR_RANK[item.armorType] <= ns.ARMOR_RANK[best]
             local weaponOk = not item.wtype or cls.weapons[item.wtype]
             if armorOk and weaponOk then usable = true end
         end
-        if usable then keep[#keep + 1] = item else removed = removed + 1 end
+        if usable then
+            keep[#keep + 1] = item
+        else
+            sold = sold + 1
+            copper = copper + ns.Items.SellValue(item)
+        end
     end
     ns.db.bag = keep
-    ns.Print("Discarded " .. removed .. " item(s) nobody can use.")
+    ns.db.gold = (ns.db.gold or 0) + copper
+    ns.Print("Sold " .. sold .. " item(s) for " .. ns.FormatMoney(copper) .. ".")
     self:Refresh()
+end
+
+---------------------------------------------------------------------------
+-- Weapon skills panel (shares the stats frame)
+---------------------------------------------------------------------------
+
+function View:CreateSkills(parent)
+    local p = CreateFrame("Frame", nil, parent)
+    p:SetPoint("TOPLEFT", 0, -26)
+    p:SetPoint("BOTTOMRIGHT", 0, 30)
+    self.skillsPanel = p
+    self.skillNote = W.Font(p, "GameFontDisableSmall", nil, "LEFT")
+    self.skillNote:SetPoint("TOPLEFT", 8, -2)
+    self.skillNote:SetWidth(204)
+    self.skillRows = {}
+    for i = 1, #ns.WEAPON_SKILL_ORDER do
+        local row = CreateFrame("Frame", nil, p)
+        row:SetSize(204, 20)
+        row:SetPoint("TOPLEFT", 8, -16 - (i - 1) * 21)
+        row.label = W.Font(row, "GameFontHighlightSmall", nil, "LEFT")
+        row.label:SetPoint("LEFT")
+        row.value = W.Font(row, "GameFontHighlightSmall", nil, "RIGHT")
+        row.value:SetPoint("RIGHT")
+        row.train = W.Button(row, "Train", 56, 18, function(b)
+            local h = self:Selected()
+            local ok, why = ns.Hero.Train(h, b.wtype)
+            if ok then
+                ns.Print(h.name .. " learned " .. ns.WEAPON_SKILL_NAMES[b.wtype] .. ".")
+            else
+                ns.Print(why)
+            end
+            self:Refresh()
+        end)
+        row.train:SetPoint("RIGHT")
+        row.train:SetScript("OnEnter", function(b)
+            local h = self:Selected()
+            GameTooltip:SetOwner(b, "ANCHOR_RIGHT")
+            GameTooltip:SetText("Train " .. ns.WEAPON_SKILL_NAMES[b.wtype], 1, 1, 1)
+            GameTooltip:AddLine("Cost: " .. ns.FormatMoney(ns.Hero.TrainCost(h)), 1, 1, 1)
+            GameTooltip:AddLine("Starts at skill 1 and rises as you fight with it. Low skill means more misses.",
+                1, 0.82, 0, true)
+            GameTooltip:Show()
+        end)
+        row.train:SetScript("OnLeave", W.HideTooltip)
+        self.skillRows[i] = row
+    end
+end
+
+function View:RefreshSkills(h)
+    local cls = ns.Classes[h.class]
+    if not ns.Hero.UsesWeaponSkills(h) then
+        self.skillNote:SetText(cls.name .. "s can use any weapon their class allows - no training needed.")
+        for _, row in ipairs(self.skillRows) do row:Hide() end
+        return
+    end
+    local m = ns.Hero.MaxSkill(h)
+    local dw = cls.dualWield and (ns.Hero.CanDualWield(h) and "Dual wield: yes" or ("Dual wield at " .. cls.dualWield))
+        or "No dual wield"
+    self.skillNote:SetText("Max skill " .. m .. "   |   " .. dw)
+    local i = 0
+    for _, wtype in ipairs(ns.WEAPON_SKILL_ORDER) do
+        if cls.weapons[wtype] then
+            i = i + 1
+            local row = self.skillRows[i]
+            row.label:SetText(ns.WEAPON_SKILL_NAMES[wtype])
+            local v = ns.Hero.Skill(h, wtype)
+            if v then
+                row.value:SetText((v >= m and "|cff33ff33" or "|cffffd100") .. v .. " / " .. m .. "|r")
+                row.value:Show()
+                row.train:Hide()
+            else
+                row.value:Hide()
+                row.train.wtype = wtype
+                row.train:Show()
+                if (ns.db.gold or 0) >= ns.Hero.TrainCost(h) then row.train:Enable() else row.train:Disable() end
+            end
+            row:Show()
+        end
+    end
+    for j = i + 1, #self.skillRows do self.skillRows[j]:Hide() end
 end
 
 ---------------------------------------------------------------------------
@@ -253,17 +376,16 @@ function View:RefreshStats(h)
     local spec = ns.Specs[h.spec]
     self.statsTitle:SetText("|c" .. W.ClassHex(h.class) .. h.name .. "|r  " .. W.ROLE_TEXT[spec.role])
     local resName = d.resource:sub(1, 1) .. d.resource:sub(2):lower()
-    local left = { "Health", resName, "Strength", "Agility", "Stamina", "Intellect", "Spirit", "Armor",
-        "Attack Power", "Melee Crit", "Dodge", "Block", "Spell Crit", "Spell Power", "Healing", "Main Hand", "Ranged" }
-    local w = d.weapon
-    local r = d.rangedWeapon
+    local function wtext(x) return x and string.format("%d-%d @ %.1f", x.min, x.max, x.speed) or "-" end
+    local left = { "Health", resName, "Strength", "Agility", "Stamina", "Intellect", "Spirit", "Armor ("
+        .. ns.ARMOR_NAMES[ns.Hero.ArmorType(h)] .. ")", "Defense Rating", "Attack Power", "Crit (melee / spell)",
+        "Dodge", "Block", "Spell Power / Healing", "Main Hand", "Off Hand", "Ranged" }
     local right = {
-        d.maxHP, d.resource == "MANA" and d.maxPower or 100, d.str, d.agi, d.sta, d.int, d.spi, d.armor,
-        d.ap, pct(d.meleeCrit), pct(d.dodge),
+        d.maxHP, d.resource == "MANA" and d.maxPower or 100, d.str, d.agi, d.sta, d.int, d.spi, d.armor, d.def,
+        d.ap, pct(d.meleeCrit) .. " / " .. pct(d.spellCrit), pct(d.dodge),
         d.hasShield and (pct(d.blockChance) .. " / " .. d.blockValue) or "-",
-        pct(d.spellCrit), d.spellPower, d.healPower,
-        string.format("%d-%d @ %.1f", w.min, w.max, w.speed),
-        r and string.format("%d-%d @ %.1f", r.min, r.max, r.speed) or "-",
+        d.spellPower .. " / " .. d.healPower,
+        wtext(d.weapon), wtext(d.offWeapon), wtext(d.rangedWeapon),
     }
     for i, v in ipairs(right) do right[i] = tostring(v) end
     self.statLeft:SetText(table.concat(left, "\n"))
@@ -298,6 +420,12 @@ function View:Refresh()
     end
     if not sel then return end
     self:RefreshStats(sel)
+    self.statLeft:SetShown(not self.showSkills)
+    self.statRight:SetShown(not self.showSkills)
+    self.skillsPanel:SetShown(self.showSkills and true or false)
+    self.skillsToggle:SetText(self.showSkills and "Stats" or "Weapon Skills")
+    if self.showSkills then self:RefreshSkills(sel) end
+    self.goldText:SetText(ns.FormatMoney(ns.db.gold or 0))
 
     for _, slot in ipairs(ns.SLOTS) do
         local r = self.slotRows[slot]
@@ -326,7 +454,7 @@ function View:Refresh()
             b.icon:SetTexture("Interface\\Icons\\" .. item.icon)
             local c = ns.QUALITY_COLORS[item.quality] or ns.QUALITY_COLORS[1]
             b.border:SetColorTexture(c[1], c[2], c[3], 0.9)
-            local ok = ns.Hero.CanEquip(sel, item)
+            local ok = ns.Hero.CanEquip(sel, item) or (item.hand == "1H" and ns.Hero.CanEquip(sel, item, "OFFHAND"))
             b.icon:SetVertexColor(1, ok and 1 or 0.35, ok and 1 or 0.35)
             local v = ns.Hero.UpgradeValue(sel, item)
             b.up:SetShown(v ~= nil and v > 0.5)
