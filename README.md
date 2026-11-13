@@ -16,6 +16,7 @@ go, they level up and collect gear.
    - Retail: `World of Warcraft/_retail_/Interface/AddOns/Jumbla/`
    - Classic Era / Anniversary: `World of Warcraft/_classic_era_/Interface/AddOns/Jumbla/`
    - Progression Classic: `World of Warcraft/_classic_/Interface/AddOns/Jumbla/`
+   - WoW Forever: `World of Warcraft/_forever_/Interface/AddOns/Jumbla/` (interface 16001)
 
    `Jumbla.toc` must sit directly inside `Jumbla/`, not in a nested `Jumbla/Jumbla/`.
 3. **Start the game, or `/reload` if you're already logged in.** On the character select screen, open **AddOns** and

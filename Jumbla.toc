@@ -1,4 +1,4 @@
-## Interface: 120001, 110207, 50503, 11508
+## Interface: 16001, 120001, 110207, 50503, 11508
 ## Title: Jumbla: Dungeon Draft
 ## Notes: Draft a five-hero party, gear them up and auto-battle through classic dungeons. Great for flights. /jumbla
 ## Version: 0.1.0
